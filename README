@@ -1,0 +1,15 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=3188
+
+This plugin makes creating custom completion functions much easier.
+
+Features:
+     Ability to get variants from list and from dictionary keys
+     Ability to get variants from custom function
+     Allows modifying the completion description
+
+Documentation: http://kp-pav.narod2.ru/vim/doc/comp.txt.html
+Project page: http://sourceforge.net/projects/vimcompcrtr
+Dependencies (you do not need to install them by yourself, see installation details):
+vimscript #3184, http://sourceforge.net/projects/vimpluginloader
+vimscript #3186, http://sourceforge.net/projects/vimstuff
+vimscript #3187, http://sourceforge.net/projects/vimargumentchec
