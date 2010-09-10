@@ -52,8 +52,9 @@ elseif !exists("s:g.pluginloaded")
                 \       {   "model": "simple",
                 \        "required": [["type", type({})]]}],
                 \["base64decode",   "str.base64decode",
-                \       {   "model": "simple",
-                \        "required": [["type", type("")]]}],
+                \       {   "model": "optional",
+                \        "required": [["type", type("")]],
+                \        "optional": [[["bool", ""], {}, 0]]}],
                 \["regescape",   "str.escapefor.regex",
                 \       {   "model": "simple",
                 \        "required": [["type", type("")]]}],
@@ -96,11 +97,11 @@ elseif !exists("s:g.pluginloaded")
                 \        "required": [["file", "r"]]}],
                 \["cinput", "cmd.geninput",
                 \       {   "model": "optional",
-                \        "required": [["and", [["regex", '^\w\+$'],
+                \        "required": [["and", [["regex", '^[a-z][a-z_]*$'],
                 \                              ["not",
                 \                               ["keyof", s:g.cmd.inputs]]]]],
                 \        "optional": [[["type", type("")], {}, ""],
-                \                     [["or", [["type", 2],
+                \                     [["or", [["isfunc", 0],
                 \                              ["in", ['augroup', 'buffer',
                 \                                      'command', 'dir',
                 \                                      'environment', 'event',
@@ -143,8 +144,8 @@ elseif !exists("s:g.pluginloaded")
                 \"dictfunctions": s:g.c.functions,
                 \   "apiversion": "0.4",
                 \     "requires": [["load", '0.0'],
-                \                  ["chk",  '0.0'],
-                \                  ["comp", '0.1']],
+                \                  ["chk",  '0.3'],
+                \                  ["comp", '0.2']],
             \})
     let s:F.main.eerror=s:g.reginfo.functions.eerror
     "}}}2
@@ -300,7 +301,7 @@ function s:F.str.printtable(header, lines)
                     \'(i<len(v:val))?s:F.str.strlen(v:val[i]):0')))
         let i+=1
     endwhile
-    if a:header!=[]
+    if !empty(a:header)
         echohl PreProc
         echo s:F.str.printtline(a:header, lenlst)
         echohl None
@@ -312,27 +313,31 @@ endfunction
 let s:g.str.cd64=map(split("|$$$}rstuvwxyz{$$$$$$$>?@ABCDEFGHIJKLMNOPQRSTUVW$$$$$$XYZ[\\]^_`abcdefghijklmnopq",
             \              '\zs'),
             \        'char2nr(v:val)')
-function s:F.str.base64decode(str)
+function s:F.str.base64decode(str, bytearray)
     let str=map(split(substitute(a:str, '[^a-zA-Z0-9+/]', '', 'g'), '\zs'),
                 \'char2nr(v:val)')+[-1]
     let in=repeat([0], 4)
     let v=0
     let len=0
     let i=0
-    let r=""
-    while str!=[]
+    if a:bytearray
+        let r=[]
+    else
+        let r=""
+    endif
+    while !empty(str)
         let i=0
         let len=0
-        while i<4 && str!=[]
+        while i<4 && !empty(str)
             let v=0
-            while str!=[] && v==0
+            while !empty(str) && v==0
                 let v=remove(str, 0)
                 let v=(((v<43)||(v>122))?(0):(s:g.str.cd64[v-43]))
                 if v
                     let v=((v==36)?(0):(v-61))
                 endif
             endwhile
-            if str!=[]
+            if !empty(str)
                 let len+=1
                 if v
                     let in[i]=v-1
@@ -347,8 +352,13 @@ function s:F.str.base64decode(str)
                         \s:F.num.or(            in[1]*16,        in[2]/4),
                         \s:F.num.or(s:F.num.and(in[2]*64, 0xC0), in[3])]
             call map(out, 's:F.num.and(v:val, 0xFF)')
-            let r.=join(map(out[:(len-1)], 'eval(printf(''"\x%02x"'', v:val))'),
-                        \"")
+            if a:bytearray
+                let r+=out[:(len-2)]
+            else
+                let r.=join(map(out[:(len-2)],
+                            \   'eval(printf(''"\x%02x"'', v:val))'),
+                            \"")
+            endif
         endif
     endwhile
     return r
@@ -364,7 +374,7 @@ function s:F.num.and(v1, v2)
         let [v1, v2]=[nv1, nv2]
     endwhile
     let r=0
-    while list!=[]
+    while !empty(list)
         let r=(r*2) + remove(list, -1)
     endwhile
     return r
@@ -379,7 +389,7 @@ function s:F.num.or(v1, v2)
         let [v1, v2]=[nv1, nv2]
     endwhile
     let r=0
-    while list!=[]
+    while !empty(list)
         let r=(r*2) + remove(list, -1)
     endwhile
     return r
@@ -392,25 +402,28 @@ function s:F.file.checkwr(fname)
                 \filewritable(fnamemodify(a:fname, ":p:h"))==2))
 endfunction
 "{{{3 file.readfile: прочитать файл
-function s:F.file.readfile(fname)
-    " Как ни странно, такой вариант работает быстрее, чем все придуманные мною 
-    " альтернативы на чистом Vim
-    let result=""
-    if !has("unix") && filereadable("/bin/cat")
-        let result=system("/bin/cat ".shellescape(a:fname))
+" vim-7.0 не имеет функции shellescape
+if executable("cat") && exists('*shellescape')
+    function s:F.file.readfile(fname)
+        " Как ни странно, такой вариант работает быстрее, чем все придуманные 
+        " мною альтернативы на чистом Vim
+        let result=""
+        let result=system("cat ".shellescape(a:fname))
         if v:shell_error
             let result=join(readfile(a:fname, 'b'), "\n")
         endif
-    else
-        let result=join(readfile(a:fname, 'b'), "\n")
-    endif
-    return result
-    " Если в аргументах readfile не указывать 'b', то файл, не содержащий 
-    " переводов строки, прочитается как будто он пустой.
-    " return join(readfile(fname, 'b'), "\n")
-    " Есть ещё варианты через открытие буфера, но они всё равно медленнее 
-    " данного. Тем не менее, даже они могут быть быстрее join(readfile).
-endfunction
+        return result
+        " Если в аргументах readfile не указывать 'b', то файл, не содержащий 
+        " переводов строки, прочитается как будто он пустой.
+        " return join(readfile(fname, 'b'), "\n")
+        " Есть ещё варианты через открытие буфера, но они всё равно медленнее 
+        " данного. Тем не менее, даже они могут быть быстрее join(readfile).
+    endfunction
+else
+    function s:F.file.readfile(fname)
+        return join(readfile(a:fname, 'b'), "\n")
+    endfunction
+endif
 "{{{2 lst
 "{{{3 lst.let
 function s:F.lst.let(list, index, element, ...)
@@ -420,7 +433,7 @@ function s:F.lst.let(list, index, element, ...)
             let a:list[a:index]=a:element
         elseif a:index==ll
             call add(a:list, a:element)
-        elseif a:000!=[]
+        elseif !empty(a:000)
             call extend(a:list, repeat([a:000[0]], a:index-ll)+[a:element])
         endif
     elseif type(a:list)==type({}) && type(a:index)==type("")
@@ -432,17 +445,29 @@ endfunction
 "{{{3 dct.recursivefilter
 function s:F.dct.recursivefilter(dict, expr)
     let r={}
-    for [Key, Val] in items(a:dict)
-        if type(Val)==type({})
-            let r[Key]=s:F.dct.recursivefilter(Val, a:expr)
+    for [l:Key, l:Val] in items(a:dict)
+        if type(l:Val)==type({})
+            let r[l:Key]=s:F.dct.recursivefilter(l:Val, a:expr)
         elseif eval(a:expr)
-            let r[Key]=Val
+            let r[l:Key]=l:Val
         endif
-        unlet Val
+        unlet l:Val
     endfor
     return r
 endfunction
 "{{{2 cmd
+"{{{3 cmd.savehist
+function s:F.cmd.savehist()
+    if &viminfo=~'!'
+        for [key, value] in items(s:g.cmd.inputs)
+            let g:STUF_HISTORY_{toupper(key)}=join(value.history, "\n")
+        endfor
+    endif
+endfunction
+augroup StufStoreHistory
+    autocmd!
+    autocmd VimLeavePre * call s:F.cmd.savehist()
+augroup END
 "{{{3 cmd.histget
 function s:F.cmd.histget(history)
     let r=[]
@@ -502,6 +527,9 @@ function s:F.cmd.geninput(name, prompt, Completion)
                 \"history": [],
                 \"inputhistory": [],
             \}
+    if exists('g:STUF_HISTORY_'.toupper(a:name))
+        call extend(entry.history, split(g:STUF_HISTORY_{toupper(a:name)},"\n"))
+    endif
     let s:g.cmd.inputs[a:name]=entry
     if type(a:Completion)==2
         let entry.compfunc='g:__complete_input_'.a:name
@@ -601,7 +629,7 @@ function s:F.comp._completeEopt(arglead)
                 let starts=[]
                 for expr in s:g.comp.toarglead
                     let starts=filter(copy(s:g.comp.ppopt), expr)
-                    if starts!=[]
+                    if !empty(starts)
                         break
                     endif
                 endfor
@@ -616,14 +644,16 @@ function s:F.comp._completeEopt(arglead)
     return []
 endfunction
 let s:g.comp.Emodel=
-            \{"model": "simple",
-            \ "arguments": [["first", [["func", s:F.comp._completeEopt],
-            \                          ["file", ""]]]]}
+            \{"model": "words",
+            \ "words": ["first", [["func", s:F.comp._completeEopt],
+            \                     ["file", ""]]]}
 function s:F.comp._completeE(...)
     if !has_key(s:F.comp, "__completeE")
+        unlockvar! s:F.comp
         let s:F.comp.__completeE=
                     \s:F.plug.load.run(s:F.plug.comp, "ccomp",
                     \                  s:g.comp._cnameE, s:g.comp.Emodel)
+        lockvar! s:F.comp
     endif
     return call(s:F.comp.__completeE, a:000, {})
 endfunction
