@@ -58,6 +58,7 @@ elseif !exists("s:g.pluginloaded")
                 \                  ["stuf", '0.0']],
             \})
     let s:F.main.eerror=s:g.reginfo.functions.eerror
+    let s:F.main.option=s:g.reginfo.functions.option
     finish
 endif
 "{{{1 Вторая загрузка
@@ -77,7 +78,15 @@ call add(s:g.chk.f[0][2].required[0][1][1], s:g.p.emsg.idexists)
 "{{{2 Внешние дополнения
 let s:F.plug.stuf=s:F.plug.load.getfunctions("stuf")
 let s:F.plug.chk=s:F.plug.load.getfunctions("chk")
-"{{{2 main: eerror, destruct
+"{{{2 main: eerror, option, destruct
+"{{{3 s:g.defaultOptions, s:g.c.options
+let s:g.defaultOptions={
+            \"TrailingSeparator": 1,
+        \}
+let s:g.c={}
+let s:g.c.options={
+            \"TrailingSeparator": ["bool", ""],
+        \}
 "{{{3 main.destruct: выгрузить плагин
 function s:F.main.destruct()
     unlet s:g
@@ -260,6 +269,11 @@ function s:F.comp.getfiles(arglead, filter)
                 \len(fragments)-1)
     let newfiles=filter(copy(files), a:filter[0])
     let r=((empty(newfiles))?(files):(newfiles))
+    if s:F.main.option("TrailingSeparator")
+        call map(r, '((isdirectory(v:val))?'.
+                    \   '(v:val.s:g.comp.file.pathseparator):'.
+                    \   '(v:val))')
+    endif
     return map(r, 'substitute(v:val, s:g.comp.file.eps."\\{2}", '.
                 \   '"\\=s:g.comp.file.pathseparator", "g")')
 endfunction

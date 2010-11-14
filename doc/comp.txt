@@ -7,6 +7,7 @@ CONTENTS                                                     *comp-contents*
         2.1. Functions                            |comp-functions|
     3. Models                                     |comp-models|
     4. Argument descriptions                      |comp-listdescription|
+    5. Options                                    |comp-options|
 
 ==============================================================================
 1. Intro                                                        *comp-intro*
@@ -166,6 +167,14 @@ first   [{ListDescription}]                               *comp-descr-first*
         Process {ListDescription}s given in {Argument}, return first non-empty 
         list of possible values or empty list if all descriptions gave an 
         empty list.
+
+==============================================================================
+5. Options                                                    *comp-options*
+
+TrailingSeparator :: Bool                       *comp-opt-TrailingSeparator*
+    If this option is present and is true (default), then |comp-descr-file| 
+    and |comp-descr-file!| add path separator at the end of each directory 
+    name.
 
 vim: ft=help:tw=78
 

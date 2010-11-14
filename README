@@ -7,9 +7,10 @@ Features:
      Ability to get variants from custom function
      Allows modifying the completion description
 
-Documentation: http://kp-pav.narod2.ru/vim/doc/comp.txt.html
+Documentation: http://vimpluginloader.sourceforge.net/doc/comp.txt.html
 Project page: http://sourceforge.net/projects/vimcompcrtr
 Dependencies (you do not need to install them by yourself, see installation details):
 vimscript #3184, http://sourceforge.net/projects/vimpluginloader
 vimscript #3186, http://sourceforge.net/projects/vimstuff
 vimscript #3187, http://sourceforge.net/projects/vimargumentchec
+vimscript #3325, http://bitbucket.org/ZyX_I/vim-fileutils/overview
