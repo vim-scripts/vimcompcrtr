@@ -70,14 +70,41 @@ let s:g.p={
             \"emsg": {
             \   "idexists": "This completion ID already exists",
             \       "umod": "Unknown model",
+            \   "filefail": "Failed to load file %s ".
+            \               "which is part of vim-fileutils plugin",
             \},
-            \"etype": {},
+            \"etype": {
+            \   "imp": "ImportError",
+            \},
         \}
 call add(s:g.chk.f[0][2].required[0][1][1], s:g.p.emsg.idexists)
 "{{{1 Вторая загрузка — функции
 "{{{2 Внешние дополнения
 let s:F.plug.stuf=s:F.plug.load.getfunctions("stuf")
 let s:F.plug.chk=s:F.plug.load.getfunctions("chk")
+"{{{3 plug.file
+let s:F.plug.file={}
+"{{{4 s:g.plug.file
+let s:g.plug={"file": {}}
+if !exists('os#OS')
+    runtime! autoload/os.vim
+endif
+if exists('os#OS')
+    let s:g.plug.file.pathseparator=os#pathSeparator
+    let s:g.plug.file.os=os#OS
+else
+    call s:F.main.eerror("", "imp", ["filefail", 'autoload/os.vim'])
+endif
+let s:g.plug.file.eps=s:F.plug.stuf.regescape(s:g.plug.file.pathseparator)
+"{{{4 plug.file.getDirContents
+if !exists('*fileutils#GetDirContents')
+    runtime! autoload/fileutils.vim
+endif
+if exists('*fileutils#GetDirContents')
+    let s:F.plug.file.getDirContents=function('fileutils#GetDirContents')
+else
+    call s:F.main.eerror("", "imp", ["filefail", 'autoload/fileutils.vim'])
+endif
 "{{{2 main: eerror, option, destruct
 "{{{3 s:g.defaultOptions, s:g.c.options
 let s:g.defaultOptions={
@@ -157,59 +184,6 @@ function s:F.mod.words(comp, s)
 endfunction
 "{{{2 comp
 let s:g.comp={}
-"{{{3 comp.file
-let s:F.comp.file={}
-"{{{4 s:g.comp.file
-" Copied from vim-fileutils
-let s:g.comp.file={}
-if !exists('os#OS')
-    runtime! autoload/os.vim
-endif
-if exists('os#OS')
-    let s:g.comp.file.pathseparator=os#pathSeparator
-    let s:g.comp.file.os=os#OS
-else
-    let s:g.comp.file.pathseparator=fnamemodify(expand('<sfile>:h'), ':p')[-1:]
-    let s:g.comp.file.os="unknown"
-    for s:os in ["unix", "win16", "win32", "win64", "win32unix", "win95",
-                \"mac", "macunix"]
-        if has(s:os)
-            let s:g.comp.file.os=s:os
-            break
-        endif
-    endfor
-    unlet s:os
-endif
-let s:g.comp.file.eps=s:F.plug.stuf.regescape(s:g.comp.file.pathseparator)
-"{{{4 comp.file.getDirContents
-if !exists('*fileutils#GetDirContents')
-    runtime! autoload/fileutils.vim
-endif
-if exists('*fileutils#GetDirContents')
-    let s:F.comp.file.getDirContents=function('fileutils#GetDirContents')
-elseif s:g.comp.file.os=~#'unix'
-    function s:F.comp.file.getDirContents(directory)
-        let dirlist=split(glob(a:directory.'/*'), "\n", 1)
-        let r=[]
-        for directory in dirlist
-            if directory[0]!=#'/'
-                let r[-1].="\n".directory
-            else
-                call add(r, directory)
-            endif
-        endfor
-        return r
-    endfunction
-elseif s:g.comp.file.os=~#'win'
-    function s:F.comp.file.getDirContents(directory)
-        return split(glob(a:directory.'\\*'), "\n")
-    endfunction
-else
-    function s:F.comp.file.getDirContents(directory)
-        return split(glob(a:directory.
-                    \escape(s:g.comp.file.pathseparator, '`*[]\').'*'), "\n")
-    endfunction
-endif
 "{{{3 comp.getlist
 function s:F.comp.getlist(descr, arglead)
     let [type, l:Arg]=a:descr
@@ -248,16 +222,16 @@ let s:g.comp.list={
         \}
 "{{{3 comp.getfiles
 function s:F.comp.getfiles(arglead, filter)
-    let fragments=split(a:arglead, s:g.comp.file.eps)
+    let fragments=split(a:arglead, s:g.plug.file.eps)
     let globstart=''
-    if a:arglead[0]==#s:g.comp.file.pathseparator
-        let globstart=s:g.comp.file.pathseparator
+    if a:arglead[0]==#s:g.plug.file.pathseparator
+        let globstart=s:g.plug.file.pathseparator
     endif
-    if a:arglead[-1:]==#s:g.comp.file.pathseparator
+    if a:arglead[-1:]==#s:g.plug.file.pathseparator
         call add(fragments, "")
     endif
     while !empty(fragments) && (fragments[0]==#'.' || fragments[0]==#'..')
-        let globstart.=remove(fragments, 0).s:g.comp.file.pathseparator
+        let globstart.=remove(fragments, 0).s:g.plug.file.pathseparator
     endwhile
     if empty(fragments)
         if empty(globstart)
@@ -270,12 +244,15 @@ function s:F.comp.getfiles(arglead, filter)
     let newfiles=filter(copy(files), a:filter[0])
     let r=((empty(newfiles))?(files):(newfiles))
     if s:F.main.option("TrailingSeparator")
-        call map(r, '((isdirectory(v:val))?'.
-                    \   '(v:val.s:g.comp.file.pathseparator):'.
+    " isdirectory(fnamemodify(v:val, ':p')) is used instead of 
+    " isdirectory(v:val) because isdirectory() cannot handle '~' as the first 
+    " fragemnt
+        call map(r, '((isdirectory(fnamemodify(v:val, ":p")))?'.
+                    \   '(v:val.s:g.plug.file.pathseparator):'.
                     \   '(v:val))')
     endif
-    return map(r, 'substitute(v:val, s:g.comp.file.eps."\\{2}", '.
-                \   '"\\=s:g.comp.file.pathseparator", "g")')
+    return map(r, 'substitute(v:val, s:g.plug.file.eps."\\{2}", '.
+                \   '"\\=s:g.plug.file.pathseparator", "g")')
 endfunction
 "{{{3 comp.recdownglob
 function s:F.comp.recdownglob(globstart, fragments, i)
@@ -285,24 +262,26 @@ function s:F.comp.recdownglob(globstart, fragments, i)
     let dotfragment=(a:fragments[a:i]==#'.' || a:fragments[a:i]==#'..')
     let glist=[]
     if dotfragment
-        let dir=join(a:fragments[:(a:i)], s:g.comp.file.pathseparator)
-        if isdirectory(dir)
+        let dir=join(a:fragments[:(a:i)], s:g.plug.file.pathseparator)
+        " isdirectory(fnamemodify(dir, ':p')) is used instead of 
+        " isdirectory(dir) because isdirectory() cannot handle '~' as the 
+        " first fragemnt
+        if isdirectory(fnamemodify(dir, ":p"))
             let glist=[dir]
         endif
     else
         let fstart=a:globstart.
                     \((a:i)?
                     \   (join(a:fragments[:(a:i-1)],
-                    \         s:g.comp.file.pathseparator)):
+                    \         s:g.plug.file.pathseparator)):
                     \   (""))
         let fcur=a:fragments[a:i]
-        if !empty(fstart) && fstart[-1:]!=#s:g.comp.file.pathseparator
-            let fstart.=s:g.comp.file.pathseparator
+        if !empty(fstart) && fstart[-1:]!=#s:g.plug.file.pathseparator
+            let fstart.=s:g.plug.file.pathseparator
         endif
-        let dircontents=map(s:F.comp.file.getDirContents(fstart),
-                    \       'fnamemodify(v:val, ":t")')
+        let dircontents=s:F.plug.file.getDirContents(fstart)
         let glist=map(s:F.comp.toarglead(fcur, dircontents),
-                    \   'fstart.(s:g.comp.file.pathseparator).v:val')
+                    \   'fstart.(s:g.plug.file.pathseparator).v:val')
     endif
     if empty(glist)
         return s:F.comp.recdownglob(a:globstart, a:fragments, a:i-1)
@@ -310,27 +289,30 @@ function s:F.comp.recdownglob(globstart, fragments, i)
     if a:i==len(a:fragments)-1
         return glist
     endif
-    return s:F.comp.recupglob(filter(glist, 'isdirectory(v:val)'), a:fragments,
-                \             a:i+1)
+    " isdirectory(fnamemodify(v:val, ':p')) is used instead of 
+    " isdirectory(v:val) because isdirectory() cannot handle '~' as the first 
+    " fragemnt
+    return s:F.comp.recupglob(filter(glist,
+                \                    'isdirectory(fnamemodify(v:val, ":p"))'),
+                \             a:fragments, a:i+1)
 endfunction
 "{{{3 comp.recupglob
 function s:F.comp.recupglob(files, fragments, i)
     let dotfragment=(a:fragments[a:i]==#'.' || a:fragments[a:i]==#'..')
     let glist=[]
     if dotfragment
-        let glist=[join(a:fragments[:(a:i)], s:g.comp.file.pathseparator)]
+        let glist=[join(a:fragments[:(a:i)], s:g.plug.file.pathseparator)]
     endif
     let fcur=a:fragments[a:i]
     let directories={}
     for filter in s:g.comp.filters
         let curglist=[]
         for file in a:files
-            let fstart=file.s:g.comp.file.pathseparator
+            let fstart=file.s:g.plug.file.pathseparator
             if has_key(directories, fstart)
                 let dircontents=directories[fstart]
             else
-                let dircontents=map(s:F.comp.file.getDirContents(fstart),
-                            \       'fnamemodify(v:val, ":t")')
+                let dircontents=s:F.plug.file.getDirContents(fstart)
                 let directories[fstart]=dircontents
             endif
             let reg=s:F.plug.stuf.regescape(fcur)
@@ -339,19 +321,23 @@ function s:F.comp.recupglob(files, fragments, i)
                         \   split(fcur, s:g.comp.splitreg),
                         \   's:F.plug.stuf.regescape(v:val)'),
                         \'.*')
-            let curglist+=filter(copy(dircontents), filter)
+            let curglist+=map(filter(copy(dircontents), filter),
+                        \     'fstart.(s:g.plug.file.pathseparator).v:val')
         endfor
         if !empty(curglist)
             let glist=curglist
             break
         endif
     endfor
-    let glist=map(glist, 'fstart.(s:g.comp.file.pathseparator).v:val')
     if a:i==len(a:fragments)-1 || empty(glist)
         return glist
     endif
-    return s:F.comp.recupglob(filter(glist, 'isdirectory(v:val)'), a:fragments,
-                \             a:i+1)
+    " isdirectory(fnamemodify(v:val, ':p')) is used instead of 
+    " isdirectory(v:val) because isdirectory() cannot handle '~' as the first 
+    " fragemnt
+    return s:F.comp.recupglob(filter(glist,
+                \                    'isdirectory(fnamemodify(v:val, ":p"))'),
+                \             a:fragments, a:i+1)
 endfunction
 "{{{4 s:g.comp.rg
 let s:g.comp.rg={}
@@ -519,7 +505,8 @@ let s:g.chk.pref=["dict", [[["any", ""], s:g.chk.list]]]
 let s:g.chk.model=["and",]
 let s:g.chk.actions=["dict", [[["any", ""], s:g.chk.model]]]
 let s:g.chk.modcheck=["in", keys(s:F.mod)+map(keys(s:F.mod), '"input".v:val')
-            \                            +map(keys(s:F.mod), '"insert".v:val')]
+            \                            +map(keys(s:F.mod), '"insert".v:val'),
+            \         s:g.p.emsg.umod]
 let s:g.chk.insertstart=["or", [["isfunc", 1],
             \                   ["keyof", s:g.comp.start.regexs],
             \                   ["isreg", '']]]
