@@ -28,6 +28,9 @@ os#Exec({cmd}[, {cwd}])                                              *os#Exec*
     is not specified). {cmd} must be a list of Strings with at least one item. 
     No globbing or expansion is done on any items of the {cmd}. Returns error 
     code. Note that it tries to use python's suprocess module if possible.
+os#JoinPath({component}, {component}[, ...])                     *os#JoinPath*
+    Join given path components, removing duplicate and trailing path 
+    separators.
 
 ------------------------------------------------------------------------------
 2.2. Variables                                       *vim-fileutils-variables*
@@ -37,7 +40,7 @@ All listed variables are locked (see |:lockvar|). You should not modify them.
 os#OS                                                                  *os#OS*
     Contains information about operating system on which vim is run. Is either 
     "unknown", or one of "unix", "win16", "win32", "win64", "win32unix", 
-    "win95", "mac", "macunix".
+    "win95", "mac", "macunix", "amiga", "os2", "qnx", "beos", "vms".
 os#pathSeparator                                            *os#pathSeparator*
     Contains current path separator.
 

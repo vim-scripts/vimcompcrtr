@@ -6,7 +6,7 @@ let s:loaded_plugin=1
 "{{{1 Os :: os
 let os#OS="unknown"
 for s:os in ["unix", "win16", "win32", "win64", "win32unix", "win95",
-            \"mac", "macunix"]
+            \"mac", "macunix", "amiga", "os2", "qnx", "beos", "vms"]
     if has(s:os)
         let os#OS=s:os
         break
@@ -16,7 +16,8 @@ unlet s:os
 lockvar os#OS
 "{{{2 os :: pathSeparator
 let os#pathSeparator=fnamemodify(expand('<sfile>:h'), ':p')[-1:]
-lockvar os#pathSeparator
+let s:ps=os#pathSeparator
+lockvar os#pathSeparator s:ps
 "{{{1 Exec :: ([{command}, {arguments}][, {cwd}]) -> retstatus
 function os#Exec(cmd, ...)
     if type(a:cmd)!=type([])
@@ -93,6 +94,39 @@ if !exists("*s:Exec")
             return v:shell_error
         endfunction
     endif
+endif
+"{{{1 JoinPath :: filename, filename, ... -> filename
+let s:eps=escape(s:ps, '^$*~[].\')
+function os#JoinPath(...)
+    let components=filter(copy(a:000), 'type(v:val)=='.type(""))
+    if len(components)<2
+        return -1
+    endif
+    let r=substitute(s:JoinPath(components), s:eps.'\{2,}', '\=s:ps', 'g')
+    if r[-1:]==#s:ps
+        return r[:-2]
+    endif
+    return r
+endfunction
+if os#OS=~#'^win' && os#OS!~'unix'
+    if exists('+shellslash')
+        function s:JoinPath(components)
+            let r=join(a:components, s:ps)
+            if &shellslash
+                return substitute(r, '\\', '/', 'g')
+            else
+                return substitute(r, '/', '\\', 'g')
+            endif
+        endfunction
+    else
+        function s:JoinPath(components)
+            return substitute(join(a:components, s:ps), '/', '\\', 'g')
+        endfunction
+    endif
+else
+    function s:JoinPath(components)
+        return join(a:components, s:ps)
+    endfunction
 endif
 
 " vim: ft=vim:fenc=utf-8:tw=80:ts=4:expandtab
