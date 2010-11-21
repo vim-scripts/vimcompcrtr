@@ -52,7 +52,7 @@ elseif !exists("s:g.pluginloaded")
                 \          "sid": s:g.scriptid,
                 \   "scriptfile": s:g.load.scriptfile,
                 \"dictfunctions": s:g.chk.f,
-                \   "apiversion": "0.3",
+                \   "apiversion": "0.4",
                 \     "requires": [["load", '0.0'],
                 \                  ["chk",  '0.3'],
                 \                  ["stuf", '0.0']],
@@ -187,6 +187,11 @@ let s:g.comp={}
 "{{{3 comp.getlist
 function s:F.comp.getlist(descr, arglead)
     let [type, l:Arg]=a:descr
+    let forcefilter=0
+    if type[0]==#'='
+        let type=type[1:]
+        let forcefilter=1
+    endif
     if type==#"merge"
         let result=[]
         for descr in l:Arg
@@ -194,13 +199,50 @@ function s:F.comp.getlist(descr, arglead)
         endfor
         return result
     elseif type==#"file"
-        return s:F.comp.getfiles(a:arglead,
-                    \["v:val=~?a:filter[1]",
-                    \ s:F.plug.stuf.regescape(l:Arg).'$'])
+        if type(l:Arg)==2
+            return s:F.comp.getfiles(a:arglead,
+                        \['call(a:filter[1], file, {})', l:Arg], forcefilter)
+        elseif type(l:Arg)==type("")
+            let filter=[]
+            let regex=[]
+            while !empty(l:Arg)
+                let char=l:Arg[0]
+                let l:Arg=l:Arg[1:]
+                if char==#'d'
+                    call add(filter, 'isdirectory(file)')
+                elseif char==#'r'
+                    call add(filter, 'filereadable(file)')
+                elseif char==#'w'
+                    call add(filter, 'filewritable(file)==1')
+                elseif char==#'W'
+                    call add(filter, 'filewriteable(file)')
+                elseif char==#'.'
+                    let ext=matchstr(l:Arg, '^\%(\\.\|[^\\/.]\)')
+                    let l:Arg=l:Arg[len(ext):]
+                    call add(regex, s:F.plug.stuf.regescape(
+                                \'.'.substitute(ext, '\\\(.\)', '\1', 'g').'$'))
+                elseif char==#'/'
+                    let reg=matchstr(l:Arg, '^\%(\\.\|[^\\/]\)')
+                    let l:Arg=l:Arg[len(ext):]
+                    call add(regex, reg)
+                endif
+            endwhile
+            return s:F.comp.getfiles(a:arglead,
+                        \[(empty(filter)?
+                        \   (''):
+                        \   ('('.join(filter, ' || ').')')).
+                        \ (empty(regex)?
+                        \   (""):
+                        \   (((empty(filter))?(''):(' && ')).
+                        \    '(isdirectory(file)?'.
+                        \       '(1):'.
+                        \       '(file=~?'.string(join(regex, '\|')).'))'))],
+                        \forcefilter)
+        endif
     elseif type==#"file!"
         return s:F.comp.getfiles(a:arglead,
-                    \['s:F.plug.chk.checkargument(a:filter[1], v:val)',
-                    \ l:Arg])
+                    \['s:F.plug.chk.checkargument(a:filter[1], file)',
+                    \ l:Arg], forcefilter)
     elseif type==#"first"
         for descr in l:Arg
             let result=s:F.comp.getlist(descr, a:arglead)
@@ -221,7 +263,7 @@ let s:g.comp.list={
             \"keyof": "keys(l:Arg)",
         \}
 "{{{3 comp.getfiles
-function s:F.comp.getfiles(arglead, filter)
+function s:F.comp.getfiles(arglead, filter, forcefilter)
     let fragments=split(a:arglead, s:g.plug.file.eps)
     let globstart=''
     if a:arglead[0]==#s:g.plug.file.pathseparator
@@ -237,9 +279,20 @@ function s:F.comp.getfiles(arglead, filter)
         call add(fragments, "")
     endif
     let files=s:F.comp.recdownglob(globstart, fragments,
-                \len(fragments)-1)
-    let newfiles=filter(copy(files), a:filter[0])
-    let r=((empty(newfiles))?(files):(newfiles))
+                \                  len(fragments)-1)
+    let r=files
+    if !empty(a:filter[0])
+        let newfiles=[]
+        for f in files
+            let file=fnamemodify(f, ':p')
+            if isdirectory(file) || eval(a:filter[0])
+                call add(newfiles, f)
+            endif
+        endfor
+        if !empty(newfiles) || a:forcefilter
+            let r=newfiles
+        endif
+    endif
     if s:F.main.option("TrailingSeparator")
         " isdirectory(fnamemodify(v:val, ':p')) is used instead of 
         " isdirectory(v:val) because isdirectory() cannot handle '~' as the 
@@ -267,16 +320,18 @@ function s:F.comp.recdownglob(globstart, fragments, i)
             let glist=[dir]
         endif
     else
-        let curdir=a:globstart.
-                    \((a:i)?
-                    \   (join(a:fragments[:(a:i-1)],
-                    \         s:g.plug.file.pathseparator)):
-                    \   (""))
-        let fcur=a:fragments[a:i]
-        let dircontents=s:F.plug.file.getDirContents(curdir)
-        let glist=s:F.comp.toarglead(fcur, dircontents)
-        if !empty(curdir)
-            call map(glist, 'curdir.(s:g.plug.file.pathseparator).v:val')
+        let curdir=fnamemodify(a:globstart.
+                    \    ((a:i)?
+                    \       (join(a:fragments[:(a:i-1)],
+                    \             s:g.plug.file.pathseparator)):
+                    \       ("")), ':p')
+        if isdirectory(curdir)
+            let fcur=a:fragments[a:i]
+            let dircontents=s:F.plug.file.getDirContents(curdir)
+            let glist=s:F.comp.toarglead(fcur, dircontents)
+            if !empty(curdir)
+                call map(glist, 'curdir.(s:g.plug.file.pathseparator).v:val')
+            endif
         endif
     endif
     if empty(glist)
@@ -301,8 +356,13 @@ function s:F.comp.recupglob(files, fragments, i)
     endif
     let fcur=a:fragments[a:i]
     let directories={}
+    let reg=s:F.plug.stuf.regescape(fcur)
+    let reg2=join(
+                \map(
+                \   split(fcur, s:g.comp.splitreg),
+                \   's:F.plug.stuf.regescape(v:val)'),
+                \'.*')
     for filter in s:g.comp.filters
-        let curglist=[]
         for file in a:files
             let curdir=file
             if has_key(directories, curdir)
@@ -311,21 +371,17 @@ function s:F.comp.recupglob(files, fragments, i)
                 let dircontents=s:F.plug.file.getDirContents(curdir)
                 let directories[curdir]=dircontents
             endif
-            let reg=s:F.plug.stuf.regescape(fcur)
-            let reg2=join(
-                        \map(
-                        \   split(fcur, s:g.comp.splitreg),
-                        \   's:F.plug.stuf.regescape(v:val)'),
-                        \'.*')
             let tmpglist=filter(copy(dircontents), filter)
-            if !empty(curdir)
-                let tmpglist=map(tmpglist,
-                            \    'curdir.(s:g.plug.file.pathseparator).v:val')
+            if !empty(tmpglist)
+                if !empty(curdir)
+                    let tmpglist=map(tmpglist,
+                                \    'curdir.(s:g.plug.file.pathseparator).'.
+                                \            'v:val')
+                endif
+                let glist+=tmpglist
             endif
-            let curglist+=tmglist
         endfor
-        if !empty(curglist)
-            let glist=curglist
+        if !empty(glist)
             break
         endif
     endfor
@@ -499,9 +555,9 @@ let s:g.chk.list=["and", [["len", [2]],
             \                                 ["isfunc", 0]]],
             \                     ["chklst", [["equal", "list"],
             \                                 ["alllst", ["type", type("")]]]],
-            \                     ["chklst", [["equal", "file"],
+            \                     ["chklst", [["regex", '^=\?file$'],
             \                                 ["type", type("")]]],
-            \                     ["chklst", [["equal", "file!"],
+            \                     ["chklst", [["regex", '^=\?file!$'],
             \                                 ["type", type([])]]],
             \                     ["chklst", [["equal", "first"],
             \                                 s:g.chk.alist]],
