@@ -234,9 +234,6 @@ function s:F.comp.getfiles(arglead, filter)
         let globstart.=remove(fragments, 0).s:g.plug.file.pathseparator
     endwhile
     if empty(fragments)
-        if empty(globstart)
-            let globstart='./'
-        endif
         call add(fragments, "")
     endif
     let files=s:F.comp.recdownglob(globstart, fragments,
@@ -244,9 +241,9 @@ function s:F.comp.getfiles(arglead, filter)
     let newfiles=filter(copy(files), a:filter[0])
     let r=((empty(newfiles))?(files):(newfiles))
     if s:F.main.option("TrailingSeparator")
-    " isdirectory(fnamemodify(v:val, ':p')) is used instead of 
-    " isdirectory(v:val) because isdirectory() cannot handle '~' as the first 
-    " fragemnt
+        " isdirectory(fnamemodify(v:val, ':p')) is used instead of 
+        " isdirectory(v:val) because isdirectory() cannot handle '~' as the 
+        " first fragemnt
         call map(r, '((isdirectory(fnamemodify(v:val, ":p")))?'.
                     \   '(v:val.s:g.plug.file.pathseparator):'.
                     \   '(v:val))')
@@ -270,18 +267,17 @@ function s:F.comp.recdownglob(globstart, fragments, i)
             let glist=[dir]
         endif
     else
-        let fstart=a:globstart.
+        let curdir=a:globstart.
                     \((a:i)?
                     \   (join(a:fragments[:(a:i-1)],
                     \         s:g.plug.file.pathseparator)):
                     \   (""))
         let fcur=a:fragments[a:i]
-        if !empty(fstart) && fstart[-1:]!=#s:g.plug.file.pathseparator
-            let fstart.=s:g.plug.file.pathseparator
+        let dircontents=s:F.plug.file.getDirContents(curdir)
+        let glist=s:F.comp.toarglead(fcur, dircontents)
+        if !empty(curdir)
+            call map(glist, 'curdir.(s:g.plug.file.pathseparator).v:val')
         endif
-        let dircontents=s:F.plug.file.getDirContents(fstart)
-        let glist=map(s:F.comp.toarglead(fcur, dircontents),
-                    \   'fstart.(s:g.plug.file.pathseparator).v:val')
     endif
     if empty(glist)
         return s:F.comp.recdownglob(a:globstart, a:fragments, a:i-1)
@@ -308,12 +304,12 @@ function s:F.comp.recupglob(files, fragments, i)
     for filter in s:g.comp.filters
         let curglist=[]
         for file in a:files
-            let fstart=file.s:g.plug.file.pathseparator
-            if has_key(directories, fstart)
-                let dircontents=directories[fstart]
+            let curdir=file
+            if has_key(directories, curdir)
+                let dircontents=directories[curdir]
             else
-                let dircontents=s:F.plug.file.getDirContents(fstart)
-                let directories[fstart]=dircontents
+                let dircontents=s:F.plug.file.getDirContents(curdir)
+                let directories[curdir]=dircontents
             endif
             let reg=s:F.plug.stuf.regescape(fcur)
             let reg2=join(
@@ -321,8 +317,12 @@ function s:F.comp.recupglob(files, fragments, i)
                         \   split(fcur, s:g.comp.splitreg),
                         \   's:F.plug.stuf.regescape(v:val)'),
                         \'.*')
-            let curglist+=map(filter(copy(dircontents), filter),
-                        \     'fstart.(s:g.plug.file.pathseparator).v:val')
+            let tmpglist=filter(copy(dircontents), filter)
+            if !empty(curdir)
+                let tmpglist=map(tmpglist,
+                            \    'curdir.(s:g.plug.file.pathseparator).v:val')
+            endif
+            let curglist+=tmglist
         endfor
         if !empty(curglist)
             let glist=curglist
@@ -469,9 +469,16 @@ function s:F.comp.main(comp, ...)
     endif
     let s=call(s:F.comp.split, [a:comp, input]+a:000, {})
     if empty(s)
-        return []
+        if input!=2
+            return []
+        else
+            return ""
+        endif
     endif
     let r=s:F.mod[model](a:comp, s)
+    if get(a:comp, "escape", input==0)
+        call map(r, 'fnameescape(v:val)')
+    endif
     if input==1
         call map(r, 's.prefix . v:val')
     elseif input==2
@@ -518,6 +525,7 @@ call add(s:g.chk.model,  [["hkey", "model"],
             \                       [["equal", "words"], s:g.chk.list],
             \                       [["equal", "start"], s:g.chk.insertstart],
             \                       [["equal", "argsplitregex"], ["isreg", '']],
+            \                       [["equal", "escape"], ["bool", ""]],
             \                      ]]])
 let s:g.chk.f[0][2].required[1]=s:g.chk.model
 "{{{2 out
