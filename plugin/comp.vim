@@ -545,7 +545,10 @@ function s:F.comp.main(comp, ...)
         endif
     endif
     let r=s:F.mod[model](a:comp, s)
-    if get(a:comp, "escape", input==0)
+    let escape=get(a:comp, "escape", ((input==0)?1:0))
+    if escape==1
+        call map(r, 'escape(v:val, "\\| \"\n")')
+    elseif escape==2
         call map(r, 'fnameescape(v:val)')
     endif
     if input==1
@@ -594,7 +597,7 @@ call add(s:g.chk.model,  [["hkey", "model"],
             \                       [["equal", "words"], s:g.chk.list],
             \                       [["equal", "start"], s:g.chk.insertstart],
             \                       [["equal", "argsplitregex"], ["isreg", '']],
-            \                       [["equal", "escape"], ["bool", ""]],
+            \                       [["equal", "escape"], ["in", [0, 1, 2]]],
             \                      ]]])
 let s:g.chk.f[0][2].required[1]=s:g.chk.model
 "{{{2 out
