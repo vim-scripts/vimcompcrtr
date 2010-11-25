@@ -131,11 +131,23 @@ function s:F.mod.actions(comp, s)
         if len(a:s.arguments)==1 && !has_key(a:comp.actions, action)
             return s:F.comp.toarglead(a:s.arguments[-1], keys(a:comp.actions))
         endif
-        if has_key(a:comp.actions, action)
-            let comp=a:comp.actions[action]
-            let a:s.arguments=a:s.arguments[1:]
-            return s:F.mod[comp.model](comp, a:s)
+        if !has_key(a:comp.actions, action)
+            let la=len(action)
+            let found=0
+            for a in keys(a:comp.actions)
+                if len(a)>=la && a[:la-1]==?action
+                    let action=a
+                    let found=1
+                    break
+                endif
+            endfor
+            if !found
+                return []
+            endif
         endif
+        let comp=a:comp.actions[action]
+        let a:s.arguments=a:s.arguments[1:]
+        return s:F.mod[comp.model](comp, a:s)
     endif
     return []
 endfunction
@@ -320,14 +332,15 @@ function s:F.comp.recdownglob(globstart, fragments, i)
             let glist=[dir]
         endif
     else
-        let curdir=fnamemodify(a:globstart.
+        let curdir=a:globstart.
                     \    ((a:i)?
                     \       (join(a:fragments[:(a:i-1)],
                     \             s:g.plug.file.pathseparator)):
-                    \       ("")), ':p')
-        if isdirectory(curdir)
+                    \       (""))
+        let fullcurdir=fnamemodify(curdir, ':p')
+        if isdirectory(fullcurdir)
             let fcur=a:fragments[a:i]
-            let dircontents=s:F.plug.file.getDirContents(curdir)
+            let dircontents=s:F.plug.file.getDirContents(fullcurdir)
             let glist=s:F.comp.toarglead(fcur, dircontents)
             if !empty(curdir)
                 call map(glist, 'curdir.(s:g.plug.file.pathseparator).v:val')
